@@ -1,10 +1,12 @@
 package meter
 
 import (
+	"encoding/json"
 	"errors"
 	"image"
 	"image/color"
 	"image/draw"
+	"io/ioutil"
 	"math"
 
 	"github.com/go-audio/wav"
@@ -12,27 +14,85 @@ import (
 )
 
 type VUMeter struct {
-	Width   int
-	Height  int
-	Bars    int
-	BPM     int
-	Decoder *wav.Decoder
+	Width  int
+	Height int
+	Bars   int
+	BPM    float64
 }
 
-func (vumeter *VUMeter) Render() (out image.Image, err error) {
+type PeakData struct {
+	BPM                float64 `json:"bpm"`
+	TotalChannels      int     `json:"channels"`
+	SampleRate         int     `json:"sample_rate"`
+	TotalSamples       int     `json:"total_samples"`
+	SamplesPerBeat     int     `json:"samples_per_beat"`
+	SamplesPerMeterBar int     `json:"samples_per_meter_bar"`
+	BarsData           []int   `json:"bars_data"`
+}
 
-	if !vumeter.Decoder.IsValidFile() {
+func (vumeter *VUMeter) ReadPeaksData(fileName string) (peakData PeakData, err error) {
+	file, fileErr := ioutil.ReadFile(fileName)
+	if fileErr != nil {
+		err = fileErr
+		return
+	}
+
+	err = json.Unmarshal(file, &peakData)
+
+	return
+}
+
+func (vumeter *VUMeter) GeneratePeaksData(decoder *wav.Decoder) (peakData PeakData, err error) {
+	if !decoder.IsValidFile() {
 		err = errors.New("The file is invalid")
 
 		return
 	}
 
-	/*dur, durErr := vumeter.Decoder.Duration()
-	if durErr != nil {
+	totalChannels := decoder.NumChans
+	sampleRate := decoder.SampleRate
+
+	maxValue := math.Exp2(float64(decoder.BitDepth)) / 2
+
+	samplesPerBeat := (60.0 / vumeter.BPM) * float64(totalChannels) * float64(sampleRate)
+	samplesPerMeterBar := int(samplesPerBeat / float64(vumeter.Bars))
+
+	var barPeaks []int
+
+	buf, pcmErr := decoder.FullPCMBuffer()
+	if pcmErr != nil {
+		err = pcmErr
 		return
 	}
 
-	fmt.Println(dur)*/
+	var peakValue int
+
+	for i, s := range buf.Data {
+
+		if s > peakValue {
+			peakValue = s
+		}
+
+		if i > 0 && i%samplesPerMeterBar == 0 {
+
+			peakPercent := int((float64(peakValue) / maxValue) * 100)
+
+			barPeaks = append(barPeaks, peakPercent)
+			peakValue = 0
+		}
+	}
+
+	peakData.BPM = vumeter.BPM
+	peakData.TotalChannels = int(totalChannels)
+	peakData.SampleRate = int(sampleRate)
+	peakData.SamplesPerBeat = int(samplesPerBeat)
+	peakData.SamplesPerMeterBar = samplesPerMeterBar
+	peakData.BarsData = barPeaks
+
+	return
+}
+
+func (vumeter *VUMeter) Render(peakData PeakData) (out image.Image, err error) {
 
 	barWidth := int(math.Ceil(float64(vumeter.Width) / (float64(vumeter.Bars) * 2)))
 
@@ -44,7 +104,13 @@ func (vumeter *VUMeter) Render() (out image.Image, err error) {
 	for bar := 0; bar < vumeter.Bars; bar++ {
 		barStart := bar * barWidth * 2
 
-		barHeight := barWidth
+		//barHeight := barWidth
+
+		barHeight := int(float64(vumeter.Height) * (float64(peakData.BarsData[bar]) / 100))
+
+		if barHeight < barWidth {
+			barHeight = barWidth
+		}
 
 		barY := vumeter.Height - barHeight
 
