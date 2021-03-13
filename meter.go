@@ -14,10 +14,11 @@ import (
 )
 
 type VUMeter struct {
-	Width  int
-	Height int
-	Bars   int
-	BPM    float64
+	Width     int
+	Height    int
+	Bars      int
+	BPM       float64
+	FrameRate float64
 }
 
 type PeakData struct {
@@ -92,7 +93,7 @@ func (vumeter *VUMeter) GeneratePeaksData(decoder *wav.Decoder) (peakData PeakDa
 	return
 }
 
-func (vumeter *VUMeter) Render(peakData PeakData) (out image.Image, err error) {
+func (vumeter *VUMeter) Render(peakData PeakData, frame int) (out image.Image, err error) {
 
 	barWidth := int(math.Ceil(float64(vumeter.Width) / (float64(vumeter.Bars) * 2)))
 
@@ -101,14 +102,25 @@ func (vumeter *VUMeter) Render(peakData PeakData) (out image.Image, err error) {
 
 	im := image.NewRGBA(image.Rectangle{Max: image.Point{X: imageWidth, Y: imageHeight}})
 
+	framesPerBeat := (60.0 / vumeter.BPM) * vumeter.FrameRate
+
+	barsOffset := int(math.Round(math.Floor(float64(frame)/framesPerBeat) * framesPerBeat))
+
+	frameBarSize := math.Sin(math.Pi * (float64(frame-barsOffset) / framesPerBeat))
+
 	for bar := 0; bar < vumeter.Bars; bar++ {
 		barStart := bar * barWidth * 2
 
+		var barHeight int
+
 		//barHeight := barWidth
+		if bar+barsOffset < len(peakData.BarsData) {
+			barHeight = int(float64(vumeter.Height) * (float64(peakData.BarsData[bar+barsOffset]) / 100) * frameBarSize)
 
-		barHeight := int(float64(vumeter.Height) * (float64(peakData.BarsData[bar]) / 100))
-
-		if barHeight < barWidth {
+			if barHeight < barWidth {
+				barHeight = barWidth
+			}
+		} else {
 			barHeight = barWidth
 		}
 

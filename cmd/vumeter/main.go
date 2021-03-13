@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"io/ioutil"
 	"os"
+	"strconv"
 
 	"github.com/go-audio/wav"
 
@@ -16,7 +17,13 @@ import (
 
 func main() {
 	audioFile := flag.String("audio", "", "audio file path")
-	outputFile := flag.String("file", "", "destination file name")
+	outputFolder := flag.String("folder", "", "destination folder")
+	width := flag.Int("width", 200, "image width")
+	height := flag.Int("height", 50, "image height")
+	bars := flag.Int("bars", 60, "total bars")
+	bpm := flag.Float64("bpm", 95.0, "song speed BPM")
+	frameRate := flag.Float64("frame_rate", 30.0, "video frame rate")
+	frames := flag.Int("frames", 0, "total frames")
 
 	flag.Parse()
 
@@ -26,15 +33,15 @@ func main() {
 		os.Exit(0)
 	}
 
-	if *outputFile == "" {
-		fmt.Println("the destination file is required")
+	if *outputFolder == "" {
+		fmt.Println("the destination folder is required")
 		flag.PrintDefaults()
 		os.Exit(0)
 	}
 
 	audioPeakFile := *audioFile + ".pk"
 
-	vumeter := &meter.VUMeter{Width: 200, Height: 50, Bars: 60, BPM: 88.0}
+	vumeter := &meter.VUMeter{Width: *width, Height: *height, Bars: *bars, BPM: *bpm, FrameRate: *frameRate}
 
 	var peakData meter.PeakData
 
@@ -65,20 +72,22 @@ func main() {
 		_ = ioutil.WriteFile(audioPeakFile, peakFile, 0644)
 	}
 
-	im, err := vumeter.Render(peakData)
+	for frame := 0; frame < *frames; frame++ {
 
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		im, err := vumeter.Render(peakData, frame)
+
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		out, err := os.Create(*outputFolder + "/vumeter" + strconv.Itoa(10000+frame) + ".png")
+		if err != nil {
+			fmt.Println("Error:", err)
+		}
+
+		defer out.Close()
+
+		png.Encode(out, im)
 	}
-
-	out, err := os.Create(*outputFile)
-	if err != nil {
-		fmt.Println("Error:", err)
-	}
-
-	defer out.Close()
-
-	png.Encode(out, im)
-
 }
