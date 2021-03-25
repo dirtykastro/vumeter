@@ -22,13 +22,12 @@ type VUMeter struct {
 }
 
 type PeakData struct {
-	BPM                float64 `json:"bpm"`
-	TotalChannels      int     `json:"channels"`
-	SampleRate         int     `json:"sample_rate"`
-	TotalSamples       int     `json:"total_samples"`
-	SamplesPerBeat     int     `json:"samples_per_beat"`
-	SamplesPerMeterBar int     `json:"samples_per_meter_bar"`
-	BarsData           []int   `json:"bars_data"`
+	BPM             float64 `json:"bpm"`
+	TotalChannels   int     `json:"channels"`
+	SampleRate      int     `json:"sample_rate"`
+	TotalSamples    int     `json:"total_samples"`
+	SamplesPerFrame int     `json:"samples_per_frame"`
+	BarsData        []int   `json:"bars_data"`
 }
 
 func (vumeter *VUMeter) ReadPeaksData(fileName string) (peakData PeakData, err error) {
@@ -55,8 +54,8 @@ func (vumeter *VUMeter) GeneratePeaksData(decoder *wav.Decoder) (peakData PeakDa
 
 	maxValue := math.Exp2(float64(decoder.BitDepth)) / 2
 
-	samplesPerBeat := (60.0 / vumeter.BPM) * float64(totalChannels) * float64(sampleRate)
-	samplesPerMeterBar := int(samplesPerBeat / float64(vumeter.Bars))
+	totalSamples := float64(totalChannels) * float64(sampleRate)
+	samplesPerFrame := int(totalSamples / float64(vumeter.FrameRate))
 
 	var barPeaks []int
 
@@ -74,7 +73,7 @@ func (vumeter *VUMeter) GeneratePeaksData(decoder *wav.Decoder) (peakData PeakDa
 			peakValue = s
 		}
 
-		if i > 0 && i%samplesPerMeterBar == 0 {
+		if i > 0 && i%samplesPerFrame == 0 {
 
 			peakPercent := int((float64(peakValue) / maxValue) * 100)
 
@@ -86,8 +85,7 @@ func (vumeter *VUMeter) GeneratePeaksData(decoder *wav.Decoder) (peakData PeakDa
 	peakData.BPM = vumeter.BPM
 	peakData.TotalChannels = int(totalChannels)
 	peakData.SampleRate = int(sampleRate)
-	peakData.SamplesPerBeat = int(samplesPerBeat)
-	peakData.SamplesPerMeterBar = samplesPerMeterBar
+	peakData.SamplesPerFrame = samplesPerFrame
 	peakData.BarsData = barPeaks
 
 	return
@@ -102,11 +100,15 @@ func (vumeter *VUMeter) Render(peakData PeakData, frame int) (out image.Image, e
 
 	im := image.NewRGBA(image.Rectangle{Max: image.Point{X: imageWidth, Y: imageHeight}})
 
-	framesPerBeat := (60.0 / vumeter.BPM) * vumeter.FrameRate
+	var fullBars int
 
-	barsOffset := int(math.Round(math.Floor(float64(frame)/framesPerBeat) * framesPerBeat))
+	if frame < len(peakData.BarsData) {
+		fullBars = int(float64(vumeter.Bars) * (float64(peakData.BarsData[frame]) / 100.0))
+	}
 
-	frameBarSize := math.Sin(math.Pi * (float64(frame-barsOffset) / framesPerBeat))
+	barsOffset := (vumeter.Bars - fullBars) / 2
+
+	anglePerBar := math.Pi / float64(fullBars)
 
 	for bar := 0; bar < vumeter.Bars; bar++ {
 		barStart := bar * barWidth * 2
@@ -114,8 +116,11 @@ func (vumeter *VUMeter) Render(peakData PeakData, frame int) (out image.Image, e
 		var barHeight int
 
 		//barHeight := barWidth
-		if bar+barsOffset < len(peakData.BarsData) {
-			barHeight = int(float64(vumeter.Height) * (float64(peakData.BarsData[bar+barsOffset]) / 100) * frameBarSize)
+		if bar > barsOffset && bar < (barsOffset+fullBars) {
+
+			barAngle := float64((bar - barsOffset)) * anglePerBar
+
+			barHeight = int(float64(vumeter.Height) * math.Sin(barAngle))
 
 			if barHeight < barWidth {
 				barHeight = barWidth
