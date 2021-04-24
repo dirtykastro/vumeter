@@ -17,20 +17,18 @@ type VUMeter struct {
 	Width     int
 	Height    int
 	Bars      int
-	BPM       float64
 	FrameRate float64
 }
 
 type PeakData struct {
-	BPM             float64 `json:"bpm"`
-	TotalChannels   int     `json:"channels"`
-	SampleRate      int     `json:"sample_rate"`
-	TotalSamples    int     `json:"total_samples"`
-	SamplesPerFrame int     `json:"samples_per_frame"`
-	BarsData        []int   `json:"bars_data"`
+	TotalChannels   int   `json:"channels"`
+	SampleRate      int   `json:"sample_rate"`
+	TotalSamples    int   `json:"total_samples"`
+	SamplesPerFrame int   `json:"samples_per_frame"`
+	BarsData        []int `json:"bars_data"`
 }
 
-func (vumeter *VUMeter) ReadPeaksData(fileName string) (peakData PeakData, err error) {
+func ReadPeaksData(fileName string) (peakData PeakData, err error) {
 	file, fileErr := ioutil.ReadFile(fileName)
 	if fileErr != nil {
 		err = fileErr
@@ -42,7 +40,7 @@ func (vumeter *VUMeter) ReadPeaksData(fileName string) (peakData PeakData, err e
 	return
 }
 
-func (vumeter *VUMeter) GeneratePeaksData(decoder *wav.Decoder) (peakData PeakData, err error) {
+func GeneratePeaksData(decoder *wav.Decoder, frameRate float64) (peakData PeakData, err error) {
 	if !decoder.IsValidFile() {
 		err = errors.New("The file is invalid")
 
@@ -55,7 +53,7 @@ func (vumeter *VUMeter) GeneratePeaksData(decoder *wav.Decoder) (peakData PeakDa
 	maxValue := math.Exp2(float64(decoder.BitDepth)) / 2
 
 	totalSamples := float64(totalChannels) * float64(sampleRate)
-	samplesPerFrame := int(totalSamples / float64(vumeter.FrameRate))
+	samplesPerFrame := int(totalSamples / frameRate)
 
 	var barPeaks []int
 
@@ -82,7 +80,6 @@ func (vumeter *VUMeter) GeneratePeaksData(decoder *wav.Decoder) (peakData PeakDa
 		}
 	}
 
-	peakData.BPM = vumeter.BPM
 	peakData.TotalChannels = int(totalChannels)
 	peakData.SampleRate = int(sampleRate)
 	peakData.SamplesPerFrame = samplesPerFrame

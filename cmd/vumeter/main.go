@@ -21,7 +21,6 @@ func main() {
 	width := flag.Int("width", 200, "image width")
 	height := flag.Int("height", 50, "image height")
 	bars := flag.Int("bars", 60, "total bars")
-	bpm := flag.Float64("bpm", 95.0, "song speed BPM")
 	frameRate := flag.Float64("frame_rate", 30.0, "video frame rate")
 	frames := flag.Int("frames", 0, "total frames")
 
@@ -41,13 +40,11 @@ func main() {
 
 	audioPeakFile := *audioFile + ".pk"
 
-	vumeter := &meter.VUMeter{Width: *width, Height: *height, Bars: *bars, BPM: *bpm, FrameRate: *frameRate}
-
 	var peakData meter.PeakData
 
 	if graphicutils.Exists(audioPeakFile) {
 		var err error
-		peakData, err = vumeter.ReadPeaksData(audioPeakFile)
+		peakData, err = meter.ReadPeaksData(audioPeakFile)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
@@ -65,12 +62,14 @@ func main() {
 
 		wavDecoder = wav.NewDecoder(f)
 
-		peakData, err = vumeter.GeneratePeaksData(wavDecoder)
+		peakData, err = meter.GeneratePeaksData(wavDecoder, *frameRate)
 
 		peakFile, _ := json.MarshalIndent(peakData, "", " ")
 
 		_ = ioutil.WriteFile(audioPeakFile, peakFile, 0644)
 	}
+
+	vumeter := &meter.VUMeter{Width: *width, Height: *height, Bars: *bars, FrameRate: *frameRate}
 
 	for frame := 0; frame < *frames; frame++ {
 
